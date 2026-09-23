@@ -119,7 +119,7 @@ input:focus{outline:none; border-color:var(--red);}
   <nav>
     <button data-v="client" class="active">Client</button>
     <button data-v="banker">Banquier</button>
-    <button data-v="settings">Réglages</button>
+    <button data-v="admin">Admin</button>
   </nav>
 </header>
 <main>
@@ -159,15 +159,21 @@ input:focus{outline:none; border-color:var(--red);}
 <section id="v-banker" class="view">
   <div id="banker-login" class="widget stack" style="max-width:420px; margin:0 auto;">
     <h1>Espace banquier</h1>
-    <p class="sub" id="bk-sub">Accès réservé au personnel de Maze Bank.</p>
+    <p class="sub">Connectez-vous avec vos identifiants d'agence.</p>
     <div>
+      <label>Nom d'utilisateur</label>
+      <input id="bk-user" placeholder="j.dupont">
       <label>Mot de passe</label>
       <input id="bk-pw" type="password">
-      <button class="btn" onclick="bankerAuth()" id="bk-btn">Se connecter</button>
+      <button class="btn" onclick="bankerAuth()">Se connecter</button>
       <div class="err" id="bk-err"></div>
     </div>
   </div>
   <div id="banker-dash" class="stack" style="display:none;">
+    <div class="widget" style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px;">
+      <span class="sub" style="margin:0;">Connecté en tant que <strong style="color:var(--white);" id="bk-current"></strong></span>
+      <button class="btn ghost sm" onclick="location.reload()">Déconnexion</button>
+    </div>
     <div class="stats3" id="bk-stats"></div>
     <div class="widget">
       <h2>Ouvrir un nouveau compte</h2>
@@ -189,18 +195,41 @@ input:focus{outline:none; border-color:var(--red);}
       <div id="acc-list"><div class="empty">Chargement...</div></div>
     </div>
     <div class="widget" id="acc-detail" style="display:none;"></div>
-  </div>
-</section>
-
-<section id="v-settings" class="view">
-  <div class="widget stack" style="max-width:480px; margin:0 auto;">
-    <h1>Intégration Discord</h1>
-    <p class="sub">Ce webhook est partagé par tous les appareils : les événements (ouverture de compte, opérations) sont envoyés dans votre salon Discord.</p>
-    <div>
-      <label>URL du webhook</label>
+    <div class="widget">
+      <h2>Intégration Discord</h2>
+      <p class="sub" style="margin-top:-8px;">Webhook partagé par tous les appareils.</p>
+      <label style="margin-top:0;">URL du webhook</label>
       <input id="wh-url" placeholder="https://discord.com/api/webhooks/...">
       <div style="display:flex; gap:10px;"><button class="btn" onclick="saveWebhook()">Enregistrer</button><button class="btn ghost" onclick="testWebhook()">Tester</button></div>
       <div class="err" id="wh-status"></div>
+    </div>
+  </div>
+</section>
+
+<section id="v-admin" class="view">
+  <div id="admin-login" class="widget stack" style="max-width:420px; margin:0 auto;">
+    <h1>Espace administrateur</h1>
+    <p class="sub">Accès réservé à la direction de Maze Bank.</p>
+    <div>
+      <label>Mot de passe administrateur</label>
+      <input id="ad-pw" type="password">
+      <button class="btn" onclick="adminAuth()">Se connecter</button>
+      <div class="err" id="ad-err"></div>
+    </div>
+  </div>
+  <div id="admin-dash" class="stack" style="display:none;">
+    <div class="widget">
+      <h2>Créer un compte banquier</h2>
+      <div class="grid2">
+        <div><label style="margin-top:0;">Nom d'utilisateur</label><input id="b-user" placeholder="j.dupont"></div>
+        <div><label style="margin-top:0;">Mot de passe</label><input id="b-pass" type="password"></div>
+      </div>
+      <button class="btn" onclick="createBanker()">Créer le banquier</button>
+      <div class="ok" id="b-status"></div>
+    </div>
+    <div class="widget">
+      <h2>Banquiers enregistrés</h2>
+      <div id="bankers-list"><div class="empty">Chargement...</div></div>
     </div>
   </div>
 </section>
@@ -210,23 +239,41 @@ input:focus{outline:none; border-color:var(--red);}
 <script>
 const firebaseConfig={apiKey:"AIzaSyDKMe8vbEniD_xrbVya3v8K7synPj25JkY",authDomain:"maze-bank-a8cfa.firebaseapp.com",projectId:"maze-bank-a8cfa",storageBucket:"maze-bank-a8cfa.firebasestorage.app",messagingSenderId:"670129362828",appId:"1:670129362828:web:c8cd7f3f06ddf25185a8a9"};
 let db=null, firebaseReady=false;
-try{ if(firebaseConfig.apiKey!=="VOTRE_API_KEY"){ firebase.initializeApp(firebaseConfig); db=firebase.firestore(); firebaseReady=true; } }catch(e){}
+try{ if(firebaseConfig.apiKey!=="VOTRE_API_KEY"){ firebase.initializeApp(firebaseConfig); db=firebase.firestore(); firebaseReady=true; } }catch(e){ console.error('Maze Bank – échec init Firebase:',e); }
 if(!firebaseReady) document.getElementById('test-banner').style.display='block';
+
+function withTimeout(p,ms=12000){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('Délai dépassé : la base de données ne répond pas (vérifiez la config Firebase et les règles Firestore, console F12 pour le détail).')),ms))]); }
+window.addEventListener('unhandledrejection',ev=>{
+  console.error('Maze Bank – erreur :',ev.reason);
+  document.querySelectorAll('.err,.ok,.empty').forEach(el=>{
+    if(/Vérification|Création|Envoi|Chargement/.test(el.textContent||'')){
+      el.className='err';
+      el.textContent=(ev.reason&&ev.reason.message)?ev.reason.message:'Erreur de connexion à la base de données. Ouvrez la console (F12) pour le détail.';
+    }
+  });
+});
 
 const accCol=()=>db.collection('accounts');
 const settingsRef=()=>db.collection('settings').doc('config');
+const bankerCol=()=>db.collection('bankers');
 const fmt=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const genNum=()=>'MZB-'+Math.floor(1000+Math.random()*9000)+'-'+Math.floor(1000+Math.random()*9000);
 const initials=n=>n.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 
-const LOCAL_ACC='mzb_accounts_local', LOCAL_SET='mzb_settings_local';
+const LOCAL_ACC='mzb_accounts_local', LOCAL_SET='mzb_settings_local', LOCAL_BK='mzb_bankers_local';
 const localAll=()=>JSON.parse(localStorage.getItem(LOCAL_ACC)||'{}');
 const localSaveAll=o=>localStorage.setItem(LOCAL_ACC,JSON.stringify(o));
-async function getSettings(){ if(firebaseReady){const d=await settingsRef().get(); return d.exists?d.data():{};} return JSON.parse(localStorage.getItem(LOCAL_SET)||'{}'); }
-async function setSettings(p){ if(firebaseReady){await settingsRef().set(p,{merge:true}); return;} const c=JSON.parse(localStorage.getItem(LOCAL_SET)||'{}'); Object.assign(c,p); localStorage.setItem(LOCAL_SET,JSON.stringify(c)); }
-async function getAllAccounts(){ if(firebaseReady){const s=await accCol().get(); return s.docs.map(d=>d.data());} return Object.values(localAll()); }
-async function getAccount(num){ if(firebaseReady){const d=await accCol().doc(num).get(); return d.exists?d.data():null;} return localAll()[num]||null; }
-async function saveAccount(acc){ if(firebaseReady){await accCol().doc(acc.num).set(acc); return;} const a=localAll(); a[acc.num]=acc; localSaveAll(a); }
+const localBankers=()=>JSON.parse(localStorage.getItem(LOCAL_BK)||'{}');
+const localSaveBankers=o=>localStorage.setItem(LOCAL_BK,JSON.stringify(o));
+async function getSettings(){ if(firebaseReady){const d=await withTimeout(settingsRef().get()); return d.exists?d.data():{};} return JSON.parse(localStorage.getItem(LOCAL_SET)||'{}'); }
+async function setSettings(p){ if(firebaseReady){await withTimeout(settingsRef().set(p,{merge:true})); return;} const c=JSON.parse(localStorage.getItem(LOCAL_SET)||'{}'); Object.assign(c,p); localStorage.setItem(LOCAL_SET,JSON.stringify(c)); }
+async function getAllAccounts(){ if(firebaseReady){const s=await withTimeout(accCol().get()); return s.docs.map(d=>d.data());} return Object.values(localAll()); }
+async function getAccount(num){ if(firebaseReady){const d=await withTimeout(accCol().doc(num).get()); return d.exists?d.data():null;} return localAll()[num]||null; }
+async function saveAccount(acc){ if(firebaseReady){await withTimeout(accCol().doc(acc.num).set(acc)); return;} const a=localAll(); a[acc.num]=acc; localSaveAll(a); }
+async function getAllBankers(){ if(firebaseReady){const s=await withTimeout(bankerCol().get()); return s.docs.map(d=>d.data());} return Object.values(localBankers()); }
+async function getBanker(user){ if(firebaseReady){const d=await withTimeout(bankerCol().doc(user).get()); return d.exists?d.data():null;} return localBankers()[user]||null; }
+async function saveBanker(b){ if(firebaseReady){await withTimeout(bankerCol().doc(b.username).set(b)); return;} const a=localBankers(); a[b.username]=b; localSaveBankers(a); }
+async function removeBanker(user){ if(firebaseReady){await withTimeout(bankerCol().doc(user).delete()); return;} const a=localBankers(); delete a[user]; localSaveBankers(a); }
 
 const ICONS={
  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
@@ -242,11 +289,10 @@ const ICONS={
  frost:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 2v20M4.2 6l15.6 12M4.2 18L19.8 6M8 3.2l4 3 4-3M8 20.8l4-3 4 3M2.2 9l5 1-2 4M21.8 9l-5 1 2 4M2.2 15l5-1-2-4M21.8 15l-5-1 2 4"/></svg>'
 };
 
-document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',async()=>{
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); document.getElementById('v-'+b.dataset.v).classList.add('active');
-  if(b.dataset.v==='settings'){ const s=await getSettings(); document.getElementById('wh-url').value=s.webhook||''; }
 }));
 function toggleSignup(show){ document.getElementById('client-login').style.display=show?'none':'block'; document.getElementById('client-signup').style.display=show?'block':'none'; document.getElementById('s-err').textContent=''; }
 
@@ -332,14 +378,46 @@ function showClientDash(acc){
       <div class="tx-amt ${t.amount>=0?'amt-pos':'amt-neg'}">${t.amount>=0?'+':''}${fmt(t.amount)} €</div></div>`).join(''):'<div class="empty">Aucune opération.</div>'}</div>`;
 }
 
+let currentBanker=null;
 async function bankerAuth(){
-  const pw=document.getElementById('bk-pw').value; const err=document.getElementById('bk-err'); err.className='ok'; err.textContent='Vérification...';
-  const s=await getSettings();
-  if(!s.bankerPassword){ if(pw.length<4){ err.className='err'; err.textContent='Choisissez un mot de passe de 4 caractères minimum.'; return; } await setSettings({bankerPassword:pw}); }
-  else if(pw!==s.bankerPassword){ err.className='err'; err.textContent='Mot de passe incorrect.'; return; }
-  err.textContent=''; document.getElementById('banker-login').style.display='none'; document.getElementById('banker-dash').style.display='block'; renderAccounts();
+  const user=document.getElementById('bk-user').value.trim();
+  const pw=document.getElementById('bk-pw').value;
+  const err=document.getElementById('bk-err'); err.className='ok'; err.textContent='Vérification...';
+  const b=await getBanker(user);
+  if(!b||b.password!==pw){ err.className='err'; err.textContent='Identifiants incorrects.'; return; }
+  err.textContent=''; currentBanker=user;
+  document.getElementById('bk-current').textContent=user;
+  document.getElementById('banker-login').style.display='none'; document.getElementById('banker-dash').style.display='block';
+  const s=await getSettings(); document.getElementById('wh-url').value=s.webhook||'';
+  renderAccounts();
 }
-(async function initBankerLabel(){ const s=await getSettings(); if(!s.bankerPassword){ document.getElementById('bk-sub').textContent="Première connexion : définissez le mot de passe de l'agence."; document.getElementById('bk-btn').textContent='Créer le mot de passe'; } })();
+
+async function adminAuth(){
+  const pw=document.getElementById('ad-pw').value; const err=document.getElementById('ad-err');
+  if(pw!=='jaimelargent'){ err.className='err'; err.textContent='Mot de passe incorrect.'; return; }
+  err.textContent=''; document.getElementById('admin-login').style.display='none'; document.getElementById('admin-dash').style.display='block';
+  renderBankers();
+}
+async function createBanker(){
+  const user=document.getElementById('b-user').value.trim(); const pass=document.getElementById('b-pass').value;
+  const status=document.getElementById('b-status');
+  if(!user||pass.length<4){ status.className='err'; status.textContent='Nom d\'utilisateur requis et mot de passe de 4 caractères minimum.'; return; }
+  const existing=await getBanker(user);
+  if(existing){ status.className='err'; status.textContent='Ce nom d\'utilisateur existe déjà.'; return; }
+  await saveBanker({username:user,password:pass});
+  document.getElementById('b-user').value=''; document.getElementById('b-pass').value='';
+  status.className='ok'; status.textContent='Banquier '+user+' créé.';
+  renderBankers();
+}
+async function renderBankers(){
+  const el=document.getElementById('bankers-list');
+  const list=await getAllBankers();
+  if(!list.length){ el.innerHTML='<div class="empty">Aucun banquier enregistré.</div>'; return; }
+  el.innerHTML=list.map(b=>`<div class="acc-row"><div class="avatar">${initials(b.username)}</div>
+    <div><div class="name">${b.username}</div></div>
+    <button class="btn ghost sm" style="margin-left:auto;" onclick="deleteBanker('${b.username}')">Révoquer</button></div>`).join('');
+}
+async function deleteBanker(user){ await removeBanker(user); renderBankers(); }
 
 async function createAccount(){
   const name=document.getElementById('n-name').value.trim(), amount=parseFloat(document.getElementById('n-amount').value)||0, pin=document.getElementById('n-pin').value.trim();
@@ -350,7 +428,7 @@ async function createAccount(){
   await saveAccount(acc);
   document.getElementById('n-name').value=''; document.getElementById('n-amount').value='0'; document.getElementById('n-pin').value='';
   status.textContent='Compte '+acc.num+' créé.'; renderAccounts();
-  const r=await pushDiscord({title:'🏦 Nouveau compte ouvert',color:16727853,timestamp:new Date().toISOString(),fields:[{name:'Titulaire',value:name,inline:true},{name:'Numéro de compte',value:acc.num,inline:true},{name:'Dépôt initial',value:fmt(amount)+' €',inline:true},{name:'Origine',value:'Créé par un banquier',inline:false}]});
+  const r=await pushDiscord({title:'🏦 Nouveau compte ouvert',color:16727853,timestamp:new Date().toISOString(),fields:[{name:'Titulaire',value:name,inline:true},{name:'Numéro de compte',value:acc.num,inline:true},{name:'Dépôt initial',value:fmt(amount)+' €',inline:true},{name:'Banquier',value:currentBanker||'—',inline:true},{name:'Origine',value:'Créé par un banquier',inline:false}]});
   if(!r.ok) status.textContent+=' (Discord : '+r.msg+')';
 }
 
@@ -379,7 +457,7 @@ async function toggleFreeze(num){
   const acc=await getAccount(num); const frozen=acc.status==='frozen';
   acc.status=frozen?'active':'frozen'; await saveAccount(acc);
   pushDiscord({title:frozen?'🔓 Compte débloqué':'🔒 Compte gelé — suspicion de fraude',color:16727853,timestamp:new Date().toISOString(),
-    fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true}]});
+    fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true},{name:'Banquier',value:currentBanker||'—',inline:true}]});
   renderAccounts(); openAccount(num);
 }
 async function openAccount(num){
@@ -416,7 +494,7 @@ async function doOp(num){
   await saveAccount(acc);
   const status=document.getElementById('op-status'); status.className='ok'; status.textContent='Opération enregistrée.';
   renderAccounts(); openAccount(num);
-  if(notify){ const r=await pushDiscord({title:amount>=0?'💰 Dépôt':'💸 Retrait',color:16727853,timestamp:new Date().toISOString(),fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true},{name:'Montant',value:(amount>=0?'+':'')+fmt(amount)+' €',inline:true},{name:'Libellé',value:label,inline:false}]});
+  if(notify){ const r=await pushDiscord({title:amount>=0?'💰 Dépôt':'💸 Retrait',color:16727853,timestamp:new Date().toISOString(),fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true},{name:'Montant',value:(amount>=0?'+':'')+fmt(amount)+' €',inline:true},{name:'Banquier',value:currentBanker||'—',inline:true},{name:'Libellé',value:label,inline:false}]});
     if(!r.ok){ const s=document.getElementById('op-status'); if(s){s.className='err'; s.textContent='Discord : '+r.msg;} } }
 }
 </script>
