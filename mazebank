@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maze Bank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --black:#050505; --bg:#0c0c0c; --panel:#151516; --panel2:#1d1d1f;
+  --white:#f6f6f4; --dim:#8b8b8a; --red:#ff2d2d; --red-deep:#c40000;
+  --red-soft:rgba(255,45,45,.14); --green:#3ddc84; --line:#232324;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{background:var(--bg); color:var(--white); font-family:'Inter',sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased;}
+h1,h2,.num-lg{font-family:'Space Grotesk',sans-serif;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+svg{width:19px; height:19px; flex-shrink:0;}
+#test-banner{display:none; background:var(--red-soft); border-bottom:1px solid var(--red-deep); color:var(--white); font-size:.8rem; padding:9px 24px; text-align:center;}
+header{display:flex; align-items:center; justify-content:space-between; padding:20px 28px; position:sticky; top:0; z-index:10; background:rgba(5,5,5,.85); backdrop-filter:blur(14px); border-bottom:1px solid var(--line);}
+.logo{display:flex; align-items:center; gap:9px; font-weight:700; font-size:1.15rem; letter-spacing:-.02em;}
+.logo .sq{width:13px; height:13px; background:var(--red); border-radius:4px;}
+nav{display:flex; gap:4px; background:var(--panel); padding:4px; border-radius:14px; border:1px solid var(--line);}
+nav button{background:none; border:none; color:var(--dim); padding:8px 16px; font-family:'Inter'; font-weight:500; font-size:.86rem; cursor:pointer; border-radius:10px;}
+nav button.active{color:var(--black); background:var(--white);}
+main{max-width:880px; margin:0 auto; padding:28px 20px 90px;}
+.stack{display:flex; flex-direction:column; gap:14px;}
+.widget{background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:24px;}
+.view{display:none;} .view.active{display:block;}
+h1{font-size:1.45rem; font-weight:600; letter-spacing:-.01em;}
+h2{font-size:1rem; font-weight:600; margin-bottom:14px;}
+p.sub{color:var(--dim); font-size:.88rem; margin-top:4px;}
+label{display:block; font-size:.78rem; color:var(--dim); margin-bottom:6px; margin-top:16px;}
+input{width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--white); border-radius:12px; padding:13px 14px; font-family:'Inter'; font-size:.94rem;}
+input:focus{outline:none; border-color:var(--red);}
+.btn{margin-top:18px; background:var(--red); color:#fff; border:none; border-radius:12px; padding:13px 20px; font-family:'Inter'; font-weight:600; font-size:.9rem; cursor:pointer; display:inline-flex; align-items:center; gap:8px;}
+.btn:hover{background:var(--red-deep);}
+.btn.ghost{background:var(--panel2); color:var(--white); border:1px solid var(--line);}
+.btn.ghost:hover{border-color:var(--red);}
+.btn.sm{padding:9px 14px; font-size:.82rem; margin-top:0;}
+.link{background:none; border:none; color:var(--dim); font-family:'Inter'; font-size:.85rem; cursor:pointer; margin-top:18px; text-decoration:underline;}
+.link:hover{color:var(--white);}
+.err{color:var(--red); font-size:.85rem; margin-top:10px; min-height:1em;}
+.ok{color:var(--green); font-size:.85rem; margin-top:10px; min-height:1em;}
+/* balance widget */
+.balance-card{background:linear-gradient(155deg,#151516 0%,#0a0a0a 70%); border:1px solid var(--line); border-radius:22px; padding:28px; position:relative; overflow:hidden;}
+.balance-card:before{content:''; position:absolute; top:-60px; right:-60px; width:200px; height:200px; background:radial-gradient(circle,var(--red-soft),transparent 70%);}
+.bc-top{display:flex; justify-content:space-between; align-items:flex-start; position:relative;}
+.bc-label{color:var(--dim); font-size:.8rem;}
+.bc-tag{background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:4px 10px; font-size:.76rem; color:var(--dim);}
+.num-lg{font-size:2.5rem; font-weight:600; margin-top:8px; letter-spacing:-.02em; position:relative;}
+.quick-row{display:flex; gap:10px; margin-top:22px; position:relative;}
+.qbtn{flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:12px; display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--white); font-size:.72rem; cursor:pointer; font-family:'Inter';}
+.qbtn:hover{border-color:var(--red);}
+.qbtn svg{color:var(--red);}
+/* stats grid */
+.stats3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+.stat{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px;}
+.stat .v{font-family:'Space Grotesk'; font-size:1.4rem; font-weight:700; margin-top:4px;}
+.stat .l{color:var(--dim); font-size:.74rem;}
+@media(max-width:640px){.stats3{grid-template-columns:1fr 1fr;} .stats3 .stat:last-child{grid-column:1/-1;}}
+/* tx list */
+.tx{display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line);}
+.tx:last-child{border-bottom:none;}
+.tx-ic{width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.tx-ic.in{background:rgba(61,220,132,.14); color:var(--green);}
+.tx-ic.out{background:var(--red-soft); color:var(--red);}
+.tx-body{flex:1; min-width:0;}
+.tx-label{font-size:.9rem; font-weight:500;}
+.tx-date{color:var(--dim); font-size:.76rem;}
+.tx-amt{font-family:'IBM Plex Mono'; font-weight:600; font-size:.92rem;}
+.amt-pos{color:var(--green);} .amt-neg{color:var(--red);}
+/* accounts list */
+.acc-row{display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid var(--line); cursor:pointer;}
+.acc-row:last-child{border-bottom:none;}
+.acc-row:hover .name{color:var(--red);}
+.avatar{width:38px; height:38px; border-radius:50%; background:var(--panel2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:600; font-size:.85rem; flex-shrink:0;}
+.acc-row .name{font-weight:500; font-size:.92rem;}
+.acc-row .num{color:var(--dim); font-size:.78rem;}
+.acc-row .bal{font-family:'IBM Plex Mono'; font-weight:600; font-size:.9rem; margin-left:auto;}
+.acc-row .chev{color:var(--dim);}
+.check{display:flex; align-items:center; gap:8px; margin-top:16px; font-size:.85rem; color:var(--dim);}
+.check input{width:auto;}
+.empty{color:var(--dim); font-size:.86rem; padding:24px 0; text-align:center;}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+@media(max-width:640px){.grid2{grid-template-columns:1fr;}}
+.seg{display:flex; gap:6px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:4px;}
+.seg button{flex:1; background:none; border:none; color:var(--dim); padding:9px; border-radius:9px; font-family:'Inter'; font-weight:500; font-size:.84rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;}
+.seg button.on{background:var(--white); color:var(--black);}
+.badge{display:inline-flex; align-items:center; gap:5px; font-size:.72rem; padding:4px 10px; border-radius:8px; font-weight:500;}
+.badge.active{background:rgba(61,220,132,.14); color:var(--green);}
+.frozen-banner{background:linear-gradient(135deg,rgba(150,205,255,.09),rgba(150,205,255,.02)); border:1px solid rgba(150,205,255,.3); border-radius:16px; padding:18px; color:#dff0ff; font-size:.86rem; display:flex; align-items:center; gap:12px; position:relative; overflow:hidden; animation:frostIn .6s ease-out;}
+.frozen-banner svg{color:#8fc4ee;}
+.frozen-banner:after{content:''; position:absolute; top:-24px; right:-14px; width:100px; height:100px; background:radial-gradient(circle,rgba(150,205,255,.16),transparent 70%); pointer-events:none;}
+.badge.frozen{background:rgba(150,205,255,.14); color:#8fc4ee;}
+.balance-card.frozen{border-color:rgba(150,205,255,.3); background:linear-gradient(155deg,#0e1620 0%,#060809 75%); box-shadow:0 0 0 1px rgba(150,205,255,.06) inset, 0 0 46px -12px rgba(140,195,255,.3); animation:frostIn .6s ease-out; filter:saturate(.75);}
+.balance-card.frozen:before{background:radial-gradient(circle,rgba(150,205,255,.2),transparent 70%);}
+.balance-card.frozen:after{content:''; position:absolute; inset:0; pointer-events:none;
+  background-image:repeating-linear-gradient(115deg,rgba(200,230,255,.05) 0 1px,transparent 1px 16px),repeating-linear-gradient(65deg,rgba(200,230,255,.04) 0 1px,transparent 1px 20px);}
+.balance-card.frozen .bc-label{color:#a9cdec;}
+.balance-card.frozen .num-lg{color:#e6f4ff; text-shadow:0 0 20px rgba(150,205,255,.3);}
+.balance-card.frozen .bc-tag{border-color:rgba(150,205,255,.28); color:#bcdcf7;}
+.frost-corner{position:absolute; top:14px; right:14px; width:46px; height:46px; opacity:.22; color:#bcdcf7; z-index:0;}
+@keyframes frostIn{from{opacity:0; filter:blur(5px);} to{opacity:1; filter:blur(0);}}
+.stats3.frozen .stat,.widget.frozen{border-color:rgba(150,205,255,.18); filter:saturate(.65) brightness(.93); animation:frostIn .6s ease-out;}
+.widget.frozen{position:relative; overflow:hidden;}
+.widget.frozen:after{content:''; position:absolute; inset:0; pointer-events:none; background-image:repeating-linear-gradient(115deg,rgba(200,230,255,.04) 0 1px,transparent 1px 18px);}
+</style>
+</head>
+<body>
+<div id="test-banner">Mode test : les comptes sont enregistrés uniquement dans ce navigateur. Configurez Firebase (voir index.html) pour les partager entre tous les appareils.</div>
+<header>
+  <div class="logo"><span class="sq"></span>MAZE BANK</div>
+  <nav>
+    <button data-v="client" class="active">Client</button>
+    <button data-v="banker">Banquier</button>
+    <button data-v="settings">Réglages</button>
+  </nav>
+</header>
+<main>
+
+<section id="v-client" class="view active">
+  <div id="client-login" class="widget stack" style="max-width:420px; margin:0 auto;">
+    <h1>Bienvenue</h1>
+    <p class="sub">Entrez votre numéro de compte et votre code confidentiel.</p>
+    <div>
+      <label>Numéro de compte</label>
+      <input id="c-num" class="mono" placeholder="MZB-0000-0000">
+      <label>Code confidentiel</label>
+      <input id="c-pin" type="password" maxlength="4" placeholder="••••">
+      <button class="btn" onclick="clientLogin()">Se connecter</button>
+      <div class="err" id="c-err"></div>
+      <button class="link" onclick="toggleSignup(true)">Pas encore de compte → en ouvrir un</button>
+    </div>
+  </div>
+  <div id="client-signup" class="widget stack" style="max-width:420px; margin:0 auto; display:none;">
+    <h1>Ouvrir un compte</h1>
+    <p class="sub">Créez votre compte Maze Bank en quelques secondes.</p>
+    <div>
+      <label>Votre nom</label>
+      <input id="s-name" placeholder="Jean Dupont">
+      <label>Choisissez un code confidentiel (4 chiffres)</label>
+      <input id="s-pin" class="mono" maxlength="4" placeholder="1234">
+      <label>Dépôt initial (€, facultatif)</label>
+      <input id="s-amount" type="number" value="0">
+      <button class="btn" onclick="signup()">Créer mon compte</button>
+      <button class="link" onclick="toggleSignup(false)">← J'ai déjà un compte</button>
+      <div class="err" id="s-err"></div>
+    </div>
+  </div>
+  <div id="client-dash" class="stack" style="display:none;"></div>
+</section>
+
+<section id="v-banker" class="view">
+  <div id="banker-login" class="widget stack" style="max-width:420px; margin:0 auto;">
+    <h1>Espace banquier</h1>
+    <p class="sub" id="bk-sub">Accès réservé au personnel de Maze Bank.</p>
+    <div>
+      <label>Mot de passe</label>
+      <input id="bk-pw" type="password">
+      <button class="btn" onclick="bankerAuth()" id="bk-btn">Se connecter</button>
+      <div class="err" id="bk-err"></div>
+    </div>
+  </div>
+  <div id="banker-dash" class="stack" style="display:none;">
+    <div class="stats3" id="bk-stats"></div>
+    <div class="widget">
+      <h2>Ouvrir un nouveau compte</h2>
+      <div class="grid2">
+        <div><label style="margin-top:0;">Nom du titulaire</label><input id="n-name" placeholder="Jean Dupont"></div>
+        <div><label style="margin-top:0;">Dépôt initial (€)</label><input id="n-amount" type="number" value="0"></div>
+      </div>
+      <label>Code confidentiel (4 chiffres)</label>
+      <input id="n-pin" class="mono" maxlength="4" placeholder="1234">
+      <button class="btn" onclick="createAccount()">Créer le compte</button>
+      <div class="ok" id="n-status"></div>
+    </div>
+    <div class="widget">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h2 style="margin:0;">Comptes existants</h2>
+        <button class="btn ghost sm" onclick="renderAccounts()">Actualiser</button>
+      </div>
+      <input id="search" placeholder="Rechercher par nom ou numéro..." oninput="renderAccounts(false)" style="margin-bottom:6px;">
+      <div id="acc-list"><div class="empty">Chargement...</div></div>
+    </div>
+    <div class="widget" id="acc-detail" style="display:none;"></div>
+  </div>
+</section>
+
+<section id="v-settings" class="view">
+  <div class="widget stack" style="max-width:480px; margin:0 auto;">
+    <h1>Intégration Discord</h1>
+    <p class="sub">Ce webhook est partagé par tous les appareils : les événements (ouverture de compte, opérations) sont envoyés dans votre salon Discord.</p>
+    <div>
+      <label>URL du webhook</label>
+      <input id="wh-url" placeholder="https://discord.com/api/webhooks/...">
+      <div style="display:flex; gap:10px;"><button class="btn" onclick="saveWebhook()">Enregistrer</button><button class="btn ghost" onclick="testWebhook()">Tester</button></div>
+      <div class="err" id="wh-status"></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+const firebaseConfig={apiKey:"AIzaSyDKMe8vbEniD_xrbVya3v8K7synPj25JkY",authDomain:"maze-bank-a8cfa.firebaseapp.com",projectId:"maze-bank-a8cfa",storageBucket:"maze-bank-a8cfa.firebasestorage.app",messagingSenderId:"670129362828",appId:"1:670129362828:web:c8cd7f3f06ddf25185a8a9"};
+let db=null, firebaseReady=false;
+try{ if(firebaseConfig.apiKey!=="VOTRE_API_KEY"){ firebase.initializeApp(firebaseConfig); db=firebase.firestore(); firebaseReady=true; } }catch(e){}
+if(!firebaseReady) document.getElementById('test-banner').style.display='block';
+
+const accCol=()=>db.collection('accounts');
+const settingsRef=()=>db.collection('settings').doc('config');
+const fmt=n=>n.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const genNum=()=>'MZB-'+Math.floor(1000+Math.random()*9000)+'-'+Math.floor(1000+Math.random()*9000);
+const initials=n=>n.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+const LOCAL_ACC='mzb_accounts_local', LOCAL_SET='mzb_settings_local';
+const localAll=()=>JSON.parse(localStorage.getItem(LOCAL_ACC)||'{}');
+const localSaveAll=o=>localStorage.setItem(LOCAL_ACC,JSON.stringify(o));
+async function getSettings(){ if(firebaseReady){const d=await settingsRef().get(); return d.exists?d.data():{};} return JSON.parse(localStorage.getItem(LOCAL_SET)||'{}'); }
+async function setSettings(p){ if(firebaseReady){await settingsRef().set(p,{merge:true}); return;} const c=JSON.parse(localStorage.getItem(LOCAL_SET)||'{}'); Object.assign(c,p); localStorage.setItem(LOCAL_SET,JSON.stringify(c)); }
+async function getAllAccounts(){ if(firebaseReady){const s=await accCol().get(); return s.docs.map(d=>d.data());} return Object.values(localAll()); }
+async function getAccount(num){ if(firebaseReady){const d=await accCol().doc(num).get(); return d.exists?d.data():null;} return localAll()[num]||null; }
+async function saveAccount(acc){ if(firebaseReady){await accCol().doc(acc.num).set(acc); return;} const a=localAll(); a[acc.num]=acc; localSaveAll(a); }
+
+const ICONS={
+ up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+ down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
+ copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>',
+ refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/></svg>',
+ logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+ chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+ lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+ unlock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M7 11V8a5 5 0 0 1 9.5-2.2"/></svg>',
+ wallet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3M3 7v11a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1h-4a2 2 0 1 0 0 4"/></svg>',
+ receipt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6"/></svg>',
+ frost:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 2v20M4.2 6l15.6 12M4.2 18L19.8 6M8 3.2l4 3 4-3M8 20.8l4-3 4 3M2.2 9l5 1-2 4M21.8 9l-5 1 2 4M2.2 15l5-1-2-4M21.8 15l-5-1 2 4"/></svg>'
+};
+
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',async()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); document.getElementById('v-'+b.dataset.v).classList.add('active');
+  if(b.dataset.v==='settings'){ const s=await getSettings(); document.getElementById('wh-url').value=s.webhook||''; }
+}));
+function toggleSignup(show){ document.getElementById('client-login').style.display=show?'none':'block'; document.getElementById('client-signup').style.display=show?'block':'none'; document.getElementById('s-err').textContent=''; }
+
+async function pushDiscord(embed){
+  const s=await getSettings(); if(!s.webhook) return {ok:false,msg:'Aucun webhook configuré.'};
+  try{ const r=await fetch(s.webhook,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'Maze Bank',embeds:[embed]})});
+    return (r.ok||r.status===204)?{ok:true}:{ok:false,msg:'Discord a répondu '+r.status}; }catch(e){ return {ok:false,msg:'Requête bloquée ou hors ligne.'}; }
+}
+async function saveWebhook(){ await setSettings({webhook:document.getElementById('wh-url').value.trim()}); const el=document.getElementById('wh-status'); el.className='ok'; el.textContent='Webhook enregistré.'; }
+async function testWebhook(){ const el=document.getElementById('wh-status'); el.className='ok'; el.textContent='Envoi...'; const r=await pushDiscord({title:'🏦 Test de connexion',description:'Maze Bank est bien relié à ce salon.',color:16727853,timestamp:new Date().toISOString()}); el.className=r.ok?'ok':'err'; el.textContent=r.ok?'Message envoyé avec succès.':r.msg; }
+
+async function signup(){
+  const name=document.getElementById('s-name').value.trim(), pin=document.getElementById('s-pin').value.trim(), amount=parseFloat(document.getElementById('s-amount').value)||0;
+  const err=document.getElementById('s-err');
+  if(!name||!/^\d{4}$/.test(pin)){ err.textContent='Renseignez votre nom et un code à 4 chiffres.'; return; }
+  err.className='ok'; err.textContent='Création en cours...';
+  const num=genNum(); const acc={num,name,pin,balance:amount,status:'active',tx:amount>0?[{date:new Date().toLocaleDateString('fr-FR'),label:"Dépôt d'ouverture",amount}]:[]};
+  await saveAccount(acc);
+  pushDiscord({title:'🏦 Nouveau compte ouvert',color:16727853,timestamp:new Date().toISOString(),fields:[{name:'Titulaire',value:name,inline:true},{name:'Numéro de compte',value:num,inline:true},{name:'Dépôt initial',value:fmt(amount)+' €',inline:true},{name:'Origine',value:'Auto-inscription client',inline:false}]});
+  err.textContent=''; toggleSignup(false); showClientDash(acc);
+}
+async function clientLogin(){
+  const num=document.getElementById('c-num').value.trim(), pin=document.getElementById('c-pin').value.trim();
+  const err=document.getElementById('c-err'); err.className='ok'; err.textContent='Vérification...';
+  const acc=await getAccount(num);
+  if(!acc||acc.pin!==pin){ err.className='err'; err.textContent='Numéro de compte ou code incorrect.'; return; }
+  err.textContent=''; showClientDash(acc);
+}
+function copyNum(num){ navigator.clipboard?.writeText(num); }
+async function refreshClient(num){ const acc=await getAccount(num); if(acc) showClientDash(acc); }
+let clientOpMode='deposit';
+function setClientOpMode(m){ clientOpMode=m; document.getElementById('mode-deposit').classList.toggle('on',m==='deposit'); document.getElementById('mode-expense').classList.toggle('on',m==='expense'); document.getElementById('op-label-c').value=m==='deposit'?'Dépôt personnel':'Dépense déclarée'; }
+async function clientDoOp(num){
+  const acc=await getAccount(num); if(!acc||acc.status==='frozen') return;
+  let amount=parseFloat(document.getElementById('op-amount-c').value)||0; amount=Math.abs(amount);
+  if(amount<=0){ const s=document.getElementById('op-status-c'); s.className='err'; s.textContent='Indiquez un montant valide.'; return; }
+  if(clientOpMode==='expense') amount=-amount;
+  const label=document.getElementById('op-label-c').value.trim()||(clientOpMode==='deposit'?'Dépôt personnel':'Dépense déclarée');
+  acc.balance+=amount; acc.tx=acc.tx||[]; acc.tx.push({date:new Date().toLocaleDateString('fr-FR'),label,amount});
+  await saveAccount(acc);
+  const s=document.getElementById('op-status-c'); s.className='ok'; s.textContent='Opération enregistrée.';
+  showClientDash(acc);
+  pushDiscord({title:clientOpMode==='deposit'?'💰 Dépôt client':'🧾 Dépense déclarée',color:16727853,timestamp:new Date().toISOString(),
+    fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true},{name:'Montant',value:(amount>=0?'+':'')+fmt(amount)+' €',inline:true},{name:'Libellé',value:label,inline:false},{name:'Origine',value:'Client',inline:false}]});
+}
+function showClientDash(acc){
+  document.getElementById('client-login').style.display='none';
+  document.getElementById('client-signup').style.display='none';
+  const d=document.getElementById('client-dash'); d.style.display='block';
+  const tx=(acc.tx||[]).slice().reverse();
+  const totalIn=(acc.tx||[]).filter(t=>t.amount>0).reduce((a,t)=>a+t.amount,0);
+  const totalOut=(acc.tx||[]).filter(t=>t.amount<0).reduce((a,t)=>a+t.amount,0);
+  const frozen=acc.status==='frozen';
+  d.innerHTML=`
+  <div class="balance-card ${frozen?'frozen':''}">
+    ${frozen?`<div class="frost-corner">${ICONS.frost}</div>`:''}
+    <div class="bc-top"><div><div class="bc-label">${acc.name}</div><div class="num-lg">${fmt(acc.balance)} €</div></div><div class="bc-tag mono">${acc.num}</div></div>
+    <div class="quick-row">
+      <button class="qbtn" onclick="refreshClient('${acc.num}')">${ICONS.refresh}Actualiser</button>
+      <button class="qbtn" onclick="copyNum('${acc.num}')">${ICONS.copy}Copier l'IBAN</button>
+      <button class="qbtn" onclick="location.reload()">${ICONS.logout}Déconnexion</button>
+    </div>
+  </div>
+  ${frozen?`<div class="frozen-banner">${ICONS.frost}<div>Compte gelé — les opérations sont bloquées. Contactez votre agence pour plus d'informations.</div></div>`:`
+  <div class="widget">
+    <h2>Nouvelle opération</h2>
+    <div class="seg"><button id="mode-deposit" class="on" onclick="setClientOpMode('deposit')">${ICONS.wallet} Ajouter des fonds</button><button id="mode-expense" onclick="setClientOpMode('expense')">${ICONS.receipt} Déclarer une dépense</button></div>
+    <div class="grid2" style="margin-top:14px;">
+      <div><label style="margin-top:0;">Montant (€)</label><input id="op-amount-c" type="number" value="0"></div>
+      <div><label style="margin-top:0;">Libellé</label><input id="op-label-c" value="Dépôt personnel"></div>
+    </div>
+    <button class="btn" onclick="clientDoOp('${acc.num}')">Confirmer l'opération</button>
+    <div class="ok" id="op-status-c"></div>
+  </div>`}
+  <div class="stats3 ${frozen?'frozen':''}">
+    <div class="stat"><div class="l">Entrées</div><div class="v" style="color:var(--green);">+${fmt(totalIn)} €</div></div>
+    <div class="stat"><div class="l">Sorties</div><div class="v" style="color:var(--red);">${fmt(totalOut)} €</div></div>
+    <div class="stat"><div class="l">Opérations</div><div class="v">${(acc.tx||[]).length}</div></div>
+  </div>
+  <div class="widget ${frozen?'frozen':''}"><h2>Historique</h2>${tx.length?tx.map(t=>`
+    <div class="tx"><div class="tx-ic ${t.amount>=0?'in':'out'}">${t.amount>=0?ICONS.up:ICONS.down}</div>
+      <div class="tx-body"><div class="tx-label">${t.label}</div><div class="tx-date">${t.date}</div></div>
+      <div class="tx-amt ${t.amount>=0?'amt-pos':'amt-neg'}">${t.amount>=0?'+':''}${fmt(t.amount)} €</div></div>`).join(''):'<div class="empty">Aucune opération.</div>'}</div>`;
+}
+
+async function bankerAuth(){
+  const pw=document.getElementById('bk-pw').value; const err=document.getElementById('bk-err'); err.className='ok'; err.textContent='Vérification...';
+  const s=await getSettings();
+  if(!s.bankerPassword){ if(pw.length<4){ err.className='err'; err.textContent='Choisissez un mot de passe de 4 caractères minimum.'; return; } await setSettings({bankerPassword:pw}); }
+  else if(pw!==s.bankerPassword){ err.className='err'; err.textContent='Mot de passe incorrect.'; return; }
+  err.textContent=''; document.getElementById('banker-login').style.display='none'; document.getElementById('banker-dash').style.display='block'; renderAccounts();
+}
+(async function initBankerLabel(){ const s=await getSettings(); if(!s.bankerPassword){ document.getElementById('bk-sub').textContent="Première connexion : définissez le mot de passe de l'agence."; document.getElementById('bk-btn').textContent='Créer le mot de passe'; } })();
+
+async function createAccount(){
+  const name=document.getElementById('n-name').value.trim(), amount=parseFloat(document.getElementById('n-amount').value)||0, pin=document.getElementById('n-pin').value.trim();
+  const status=document.getElementById('n-status');
+  if(!name||!/^\d{4}$/.test(pin)){ status.className='err'; status.textContent='Renseignez un nom et un code à 4 chiffres.'; return; }
+  status.className='ok'; status.textContent='Création...';
+  const acc={num:genNum(),name,pin,balance:amount,status:'active',tx:amount>0?[{date:new Date().toLocaleDateString('fr-FR'),label:"Dépôt d'ouverture",amount}]:[]};
+  await saveAccount(acc);
+  document.getElementById('n-name').value=''; document.getElementById('n-amount').value='0'; document.getElementById('n-pin').value='';
+  status.textContent='Compte '+acc.num+' créé.'; renderAccounts();
+  const r=await pushDiscord({title:'🏦 Nouveau compte ouvert',color:16727853,timestamp:new Date().toISOString(),fields:[{name:'Titulaire',value:name,inline:true},{name:'Numéro de compte',value:acc.num,inline:true},{name:'Dépôt initial',value:fmt(amount)+' €',inline:true},{name:'Origine',value:'Créé par un banquier',inline:false}]});
+  if(!r.ok) status.textContent+=' (Discord : '+r.msg+')';
+}
+
+let allAccountsCache=[];
+async function renderStats(){
+  const el=document.getElementById('bk-stats');
+  const total=allAccountsCache.reduce((a,c)=>a+c.balance,0);
+  const today=new Date().toLocaleDateString('fr-FR');
+  const opened=allAccountsCache.filter(a=>(a.tx||[]).some(t=>t.label==="Dépôt d'ouverture"&&t.date===today)).length;
+  el.innerHTML=`<div class="stat"><div class="l">Comptes</div><div class="v">${allAccountsCache.length}</div></div>
+   <div class="stat"><div class="l">Total géré</div><div class="v">${fmt(total)} €</div></div>
+   <div class="stat"><div class="l">Ouverts aujourd'hui</div><div class="v">${opened}</div></div>`;
+}
+async function renderAccounts(refetch=true){
+  const el=document.getElementById('acc-list');
+  if(refetch){ el.innerHTML='<div class="empty">Chargement...</div>'; allAccountsCache=await getAllAccounts(); renderStats(); }
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  const list=allAccountsCache.filter(a=>a.name.toLowerCase().includes(q)||a.num.toLowerCase().includes(q));
+  if(!list.length){ el.innerHTML='<div class="empty">Aucun compte ne correspond à cette recherche.</div>'; return; }
+  el.innerHTML=list.map(a=>`<div class="acc-row" onclick="openAccount('${a.num}')">
+    <div class="avatar">${initials(a.name)}</div>
+    <div><div class="name">${a.name}${a.status==='frozen'?` <span class="badge frozen">${ICONS.lock} Gelé</span>`:''}</div><div class="num mono">${a.num}</div></div>
+    <div class="bal">${fmt(a.balance)} €</div><div class="chev">${ICONS.chev}</div></div>`).join('');
+}
+async function toggleFreeze(num){
+  const acc=await getAccount(num); const frozen=acc.status==='frozen';
+  acc.status=frozen?'active':'frozen'; await saveAccount(acc);
+  pushDiscord({title:frozen?'🔓 Compte débloqué':'🔒 Compte gelé — suspicion de fraude',color:16727853,timestamp:new Date().toISOString(),
+    fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true}]});
+  renderAccounts(); openAccount(num);
+}
+async function openAccount(num){
+  const acc=await getAccount(num);
+  const d=document.getElementById('acc-detail'); d.style.display='block';
+  const tx=(acc.tx||[]).slice().reverse();
+  const frozen=acc.status==='frozen';
+  d.innerHTML=`
+    <div style="display:flex; align-items:center; gap:12px;"><div class="avatar" style="width:46px;height:46px;font-size:1rem;">${initials(acc.name)}</div>
+      <div><div style="font-weight:600;">${acc.name}</div><div class="num mono" style="color:var(--dim);font-size:.8rem;">${acc.num}</div></div>
+      <div class="num-lg" style="margin-left:auto;font-size:1.6rem;">${fmt(acc.balance)} €</div></div>
+    <div style="display:flex; align-items:center; gap:10px; margin-top:14px;">
+      <span class="badge ${frozen?'frozen':'active'}">${frozen?ICONS.lock:''} ${frozen?'Compte gelé':'Compte actif'}</span>
+      <button class="btn ${frozen?'ghost':''} sm" style="margin-left:auto;${frozen?'':'background:var(--panel2);color:var(--red);border:1px solid var(--red-deep);'}" onclick="toggleFreeze('${num}')">${frozen?ICONS.unlock+' Dégeler le compte':ICONS.lock+' Geler le compte (fraude)'}</button>
+    </div>
+    ${frozen?`<div class="frozen-banner" style="margin-top:14px;">${ICONS.lock}<div>Ce compte est gelé : le client ne peut plus effectuer d'opérations. Vous pouvez toujours intervenir depuis cet écran.</div></div>`:''}
+    <div class="grid2" style="margin-top:20px;">
+      <div><label style="margin-top:0;">Montant (€, négatif pour un retrait)</label><input id="op-amount" type="number" value="0"></div>
+      <div><label style="margin-top:0;">Libellé</label><input id="op-label" value="Opération guichet"></div>
+    </div>
+    <div class="check"><input type="checkbox" id="op-notify" checked><label style="margin:0;">Notifier sur Discord</label></div>
+    <button class="btn" onclick="doOp('${num}')">Valider l'opération</button>
+    <div class="ok" id="op-status"></div>
+    <h2 style="margin-top:26px;">Historique</h2>
+    ${tx.length?tx.map(t=>`<div class="tx"><div class="tx-ic ${t.amount>=0?'in':'out'}">${t.amount>=0?ICONS.up:ICONS.down}</div>
+      <div class="tx-body"><div class="tx-label">${t.label}</div><div class="tx-date">${t.date}</div></div>
+      <div class="tx-amt ${t.amount>=0?'amt-pos':'amt-neg'}">${t.amount>=0?'+':''}${fmt(t.amount)} €</div></div>`).join(''):'<div class="empty">Aucune opération.</div>'}`;
+  d.scrollIntoView({behavior:'smooth'});
+}
+async function doOp(num){
+  const acc=await getAccount(num); const amount=parseFloat(document.getElementById('op-amount').value)||0;
+  const label=document.getElementById('op-label').value.trim()||'Opération guichet'; const notify=document.getElementById('op-notify').checked;
+  acc.balance+=amount; acc.tx=acc.tx||[]; acc.tx.push({date:new Date().toLocaleDateString('fr-FR'),label,amount});
+  await saveAccount(acc);
+  const status=document.getElementById('op-status'); status.className='ok'; status.textContent='Opération enregistrée.';
+  renderAccounts(); openAccount(num);
+  if(notify){ const r=await pushDiscord({title:amount>=0?'💰 Dépôt':'💸 Retrait',color:16727853,timestamp:new Date().toISOString(),fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true},{name:'Montant',value:(amount>=0?'+':'')+fmt(amount)+' €',inline:true},{name:'Libellé',value:label,inline:false}]});
+    if(!r.ok){ const s=document.getElementById('op-status'); if(s){s.className='err'; s.textContent='Discord : '+r.msg;} } }
+}
+</script>
+</body>
+</html>
