@@ -273,6 +273,7 @@ async function saveAccount(acc){ if(firebaseReady){await withTimeout(accCol().do
 async function getAllBankers(){ if(firebaseReady){const s=await withTimeout(bankerCol().get()); return s.docs.map(d=>d.data());} return Object.values(localBankers()); }
 async function getBanker(user){ if(firebaseReady){const d=await withTimeout(bankerCol().doc(user).get()); return d.exists?d.data():null;} return localBankers()[user]||null; }
 async function saveBanker(b){ if(firebaseReady){await withTimeout(bankerCol().doc(b.username).set(b)); return;} const a=localBankers(); a[b.username]=b; localSaveBankers(a); }
+async function removeAccount(num){ if(firebaseReady){await withTimeout(accCol().doc(num).delete()); return;} const a=localAll(); delete a[num]; localSaveAll(a); }
 async function removeBanker(user){ if(firebaseReady){await withTimeout(bankerCol().doc(user).delete()); return;} const a=localBankers(); delete a[user]; localSaveBankers(a); }
 
 const ICONS={
@@ -322,11 +323,11 @@ async function clientLogin(){
   err.textContent=''; showClientDash(acc);
 }
 function copyNum(num){ navigator.clipboard?.writeText(num); }
-async function refreshClient(num){ const acc=await getAccount(num); if(acc) showClientDash(acc); }
+async function refreshClient(num){ const acc=await getAccount(num); if(acc) showClientDash(acc); else { alert('Ce compte a été clôturé.'); location.reload(); } }
 let clientOpMode='deposit';
 function setClientOpMode(m){ clientOpMode=m; document.getElementById('mode-deposit').classList.toggle('on',m==='deposit'); document.getElementById('mode-expense').classList.toggle('on',m==='expense'); document.getElementById('op-label-c').value=m==='deposit'?'Dépôt personnel':'Dépense déclarée'; }
 async function clientDoOp(num){
-  const acc=await getAccount(num); if(!acc||acc.status==='frozen') return;
+  const acc=await getAccount(num); if(!acc){ alert('Ce compte a été clôturé.'); location.reload(); return; } if(acc.status==='frozen') return;
   let amount=parseFloat(document.getElementById('op-amount-c').value)||0; amount=Math.abs(amount);
   if(amount<=0){ const s=document.getElementById('op-status-c'); s.className='err'; s.textContent='Indiquez un montant valide.'; return; }
   if(clientOpMode==='expense') amount=-amount;
@@ -484,8 +485,28 @@ async function openAccount(num){
     <h2 style="margin-top:26px;">Historique</h2>
     ${tx.length?tx.map(t=>`<div class="tx"><div class="tx-ic ${t.amount>=0?'in':'out'}">${t.amount>=0?ICONS.up:ICONS.down}</div>
       <div class="tx-body"><div class="tx-label">${t.label}</div><div class="tx-date">${t.date}</div></div>
-      <div class="tx-amt ${t.amount>=0?'amt-pos':'amt-neg'}">${t.amount>=0?'+':''}${fmt(t.amount)} €</div></div>`).join(''):'<div class="empty">Aucune opération.</div>'}`;
+      <div class="tx-amt ${t.amount>=0?'amt-pos':'amt-neg'}">${t.amount>=0?'+':''}${fmt(t.amount)} €</div></div>`).join(''):'<div class="empty">Aucune opération.</div>'}
+    <div id="close-zone" style="margin-top:26px; padding-top:20px; border-top:1px solid var(--line);">
+      <button class="btn ghost sm" style="color:var(--red); border-color:var(--red-deep);" onclick="askClose('${num}')">Clôturer ce compte</button>
+    </div>`;
   d.scrollIntoView({behavior:'smooth'});
+}
+function askClose(num){
+  const z=document.getElementById('close-zone');
+  z.innerHTML=`<div class="frozen-banner" style="background:var(--red-soft); border-color:var(--red-deep);"><div>Clôture <strong>définitive</strong> : le compte et tout son historique seront supprimés et le client ne pourra plus se connecter. Pensez à verser le solde restant avant de clôturer.</div></div>
+    <div style="display:flex; gap:10px; margin-top:12px;">
+      <button class="btn sm" onclick="confirmClose('${num}')">Confirmer la clôture</button>
+      <button class="btn ghost sm" onclick="openAccount('${num}')">Annuler</button>
+    </div><div class="err" id="close-status"></div>`;
+}
+async function confirmClose(num){
+  const st=document.getElementById('close-status'); st.className='ok'; st.textContent='Clôture en cours...';
+  const acc=await getAccount(num); if(!acc){ renderAccounts(); return; }
+  await removeAccount(num);
+  pushDiscord({title:'🗑️ Compte clôturé',color:16727853,timestamp:new Date().toISOString(),
+    fields:[{name:'Titulaire',value:acc.name,inline:true},{name:'Compte',value:acc.num,inline:true},{name:'Solde à la clôture',value:fmt(acc.balance)+' €',inline:true},{name:'Banquier',value:currentBanker||'—',inline:true}]});
+  const d=document.getElementById('acc-detail'); d.style.display='none'; d.innerHTML='';
+  renderAccounts();
 }
 async function doOp(num){
   const acc=await getAccount(num); const amount=parseFloat(document.getElementById('op-amount').value)||0;
